@@ -1,0 +1,887 @@
+<! DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Twitch chat</title>
+    <script src="https://cdn.jsdelivr.net/npm/comfy.js@latest/dist/comfy.min.js"></script>
+    <script src="ff8.js"></script>
+    <script src="channel.js"></script>
+
+    <style>
+        :root {
+            --ff8-stone-left:  #33312c;
+            --ff8-stone-mid:   #54514a;
+            --ff8-username:    #f4f1ea;
+            --ff8-dim:         rgba(244, 241, 234, 0.5);
+            --ff8-mod:         #ff7b6b;
+            --ff8-sub:         #7bff9b;
+            --ff8-vip:         #e800e8;
+            --ff8-broadcaster: #d8d808;
+            --ff8-lh:          32px;
+            --ff8-y:           0px;
+            --ff8-top:         0px;
+            --ff8-bot:         0px;
+            --ff8-hx:          0px;
+        }
+
+        @font-face {
+            font-family: 'Zpix';
+            src: url("zpix.woff2") format("woff2");
+            font-display: swap;
+        }
+        html, body {
+            margin: 0;
+            font-family: 'Zpix', monospace;
+        }
+
+        #chat {
+            width: 800px;
+            height: 700px;
+            overflow-x: hidden;
+            overflow-y: hidden;
+            display: flex;
+            flex-direction: column-reverse;
+            background: transparent;
+            color: #ffffff;
+            box-sizing: border-box;
+            padding: 20px;
+        }
+
+        #chat ul {
+            list-style-type: none;
+            list-style-position: outside;
+            padding: 0;
+            margin: 0;
+        }
+
+        #chat li {
+            display: flex;
+            flex-direction: column;
+            width: max-content;
+            max-width: 480px;
+            box-sizing: border-box;
+            padding: 16px 22px;
+            background: linear-gradient(to right, var(--ff8-stone-left) 0%, var(--ff8-stone-mid) 25%, var(--ff8-stone-mid) 100%);
+            border: none;
+            box-shadow: inset 0px 3px 0px rgba(255, 255, 255, 0.35),
+                        inset 3px 0px 0px rgba(255, 255, 255, 0.35),
+                        inset 0px -3px 0px #24221f,
+                        inset -3px 0px 0px #24221f,
+                        1px 1px 0px #0a0a0a,
+                        2px 2px 0px #050505;
+            border-radius: 0px;
+            position: relative;
+            transform-origin: center;
+            animation: ff8-pop 0.18s ease-out; /* keep in sync with FF8_POP_MS */
+        }
+
+        @keyframes ff8-pop {
+            from { transform: scale(0); opacity: 0; }
+            to   { transform: scale(1); opacity: 1; }
+        }
+
+        #chat li + li {
+            margin-top: 20px;
+        }
+
+        #chat li:not(:last-of-type) {
+            opacity: 0.6;
+        }
+
+        #chat .config-notice {
+            color: var(--ff8-dim);
+            font-size: 24px;
+            padding: 12px 4px;
+            background: transparent;
+            box-shadow: none;
+        }
+
+        #chat .ff8-stone-block .username {
+            color: var(--ff8-username);
+            font-size: 24px;
+            line-height: var(--ff8-lh, 32px);
+            display: block;
+            margin-bottom: 8px;
+            word-break: break-word;
+        }
+
+        #chat .ff8-stone-block .user.mod {
+            color: var(--ff8-mod);
+        }
+
+        #chat .ff8-stone-block .user.sub {
+            color: var(--ff8-sub);
+        }
+
+        #chat .ff8-stone-block .user.vip {
+            color: var(--ff8-vip);
+        }
+
+        #chat .ff8-stone-block .user.broadcaster {
+            color: var(--ff8-broadcaster);
+        }
+
+        #chat img.badge {
+            height: 1em;
+            width: auto;
+            vertical-align: middle;
+            margin-right: 8px;
+            display: inline-block;
+        }
+
+        #chat .message-text {
+            margin: 0;
+            color: #ffffff;
+            font-size: 24px;
+            line-height: var(--ff8-lh, 32px);
+            white-space: normal;
+            word-break: break-word;
+        }
+
+        #chat .ff8-canvas {
+            display: inline-block;
+            vertical-align: baseline;
+            image-rendering: pixelated;
+            position: relative;
+            top: var(--ff8-y, 0px);
+            left: var(--ff8-hx, 0px);
+        }
+
+        #chat .bglyph {
+            display: inline-block;
+            background-image: url("ff8-font.png");
+            background-size: 2968px 224px;
+            background-repeat: no-repeat;
+            image-rendering: pixelated;
+        }
+
+        #chat img.emote {
+            height: 48px;
+            vertical-align: middle;
+            display: inline-block;
+        }
+
+        #chat .e-stack {
+            position: relative;
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        #chat .e-stack img.emote {
+            display: block;
+        }
+
+        #chat .e-stack img.emote.overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        #chat img.fx-flipx { transform: scaleX(-1); }
+        #chat img.fx-flipy { transform: scaleY(-1); }
+        #chat img.fx-wide {
+            transform: scaleX(2);
+            transform-origin: left center;
+            margin-right: 2em;
+        }
+        #chat img.fx-flipx.fx-wide, #chat img.fx-wide.fx-flipx { transform: scaleX(-2); }
+        #chat img.fx-cursed { filter: grayscale(1) contrast(1.6) brightness(0.88); }
+        #chat img.fx-hyper {
+            filter: saturate(3) hue-rotate(300deg) contrast(1.5);
+            animation: fx-shake 0.12s linear infinite;
+        }
+        #chat img.fx-rainbow { animation: fx-rainbow 1s linear infinite; }
+        #chat img.fx-jam { animation: fx-jam 0.5s linear infinite; }
+        #chat img.fx-bounce { animation: fx-bounce 0.9s ease-in-out infinite; }
+        #chat img.fx-spin { animation: fx-spin 1s linear infinite; }
+
+        @keyframes fx-rainbow {
+            from { filter: hue-rotate(0deg); }
+            to   { filter: hue-rotate(360deg); }
+        }
+        @keyframes fx-shake {
+            0%   { transform: translate(0, 0); }
+            25%  { transform: translate(-3px, 2px); }
+            50%  { transform: translate(3px, -2px); }
+            75%  { transform: translate(-2px, -3px); }
+            100% { transform: translate(2px, 3px); }
+        }
+        @keyframes fx-jam {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            25%      { transform: translateY(3px) rotate(-4deg); }
+            75%      { transform: translateY(-3px) rotate(4deg); }
+        }
+        @keyframes fx-bounce {
+            0%, 100% { transform: scaleY(1); }
+            20%      { transform: scaleY(0.7); }
+            40%      { transform: scaleX(-1) scaleY(1); }
+            60%      { transform: scaleX(-1) scaleY(0.7); }
+            80%      { transform: scaleY(1); }
+        }
+        @keyframes fx-spin {
+            from { transform: rotate(0deg); }
+            to   { transform: rotate(360deg); }
+        }
+
+        #ff8-tuner {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            width: 210px;
+            padding: 12px;
+            background: #14120f;
+            border: 2px solid #54514a;
+            box-shadow: 3px 3px 0 #050505;
+            color: #f4f1ea;
+            font-size: 12px;
+            display: none;
+        }
+        #ff8-tuner.show { display: block; }
+        #ff8-tuner h1 {
+            margin: 0 0 8px 0;
+            font-size: 12px;
+            letter-spacing: 1px;
+            color: var(--ff8-mod);
+        }
+        #ff8-tuner h1 span { color: var(--ff8-dim); font-size: 10px; }
+        #ff8-tuner label {
+            display: block;
+            margin: 6px 0;
+            line-height: 1.4;
+        }
+        #ff8-tuner output {
+            float: right;
+            color: #ffffff;
+        }
+        #ff8-tuner input[type=range] {
+            width: 100%;
+            margin: 2px 0 0 0;
+            background: #33312c;
+        }
+        #ff8-tuner button {
+            width: 100%;
+            margin-top: 10px;
+            padding: 5px;
+            background: #54514a;
+            border: 2px solid #33312c;
+            box-shadow: 2px 2px 0 #050505;
+            color: #f4f1ea;
+            font-family: inherit;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        #ff8-tuner button:active { transform: translate(2px, 2px); box-shadow: none; }
+    </style>
+
+</head>
+<body>
+    <div id="chat">
+        <ul>
+        </ul>
+    </div>
+    <div id="ff8-tuner">
+        <h1>FF8 TUNER <span>(F)</span></h1>
+        <label>line-height <output id="o-lh"></output>
+            <input type="range" data-var="--ff8-lh" data-k="lh" min="24" max="48" step="1"></label>
+        <label>nudge y <output id="o-y"></output>
+            <input type="range" data-var="--ff8-y" data-k="y" min="-10" max="10" step="1"></label>
+        <label>top trim <output id="o-top"></output>
+            <input type="range" data-var="--ff8-top" data-k="top" min="0" max="4" step="1"></label>
+        <label>bot trim <output id="o-bot"></output>
+            <input type="range" data-var="--ff8-bot" data-k="bot" min="0" max="4" step="1"></label>
+        <label>nudge x <output id="o-hx"></output>
+            <input type="range" data-var="--ff8-hx" data-k="hx" min="-6" max="6" step="1"></label>
+        <button id="ff8-bake">Bake &amp; remove</button>
+    </div>
+    <script>
+    var chat = document.querySelector("#chat>ul");
+
+    function escapeHtml(text) {
+        var div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    var FF8_SCALE = 2;
+    var FF8_POP_MS = 180;
+    var FF8_GLYFF = {};
+    var FF8_USER_ROWS = { broadcaster: 60, mod: 48, sub: 36, vip: 12 };
+    var ff8Img = null;
+
+    if (typeof FF8_FONT_DATA === "object" && FF8_FONT_DATA) {
+        Object.keys(FF8_FONT_DATA).forEach(function (k) {
+            var v = FF8_FONT_DATA[k];
+            if (/^\d+$/.test(k) && v && "x" in v && "w" in v) {
+                FF8_GLYFF[parseInt(k, 10)] = v;
+            }
+        });
+    }
+
+    if (FF8_GLYFF[8221]) FF8_GLYFF[34] = FF8_GLYFF[8221];
+    if (FF8_GLYFF[8217]) FF8_GLYFF[39] = FF8_GLYFF[8217];
+
+    ff8Img = new Image();
+    ff8Img.onload = function () {};
+    ff8Img.onerror = function () { ff8Img = null; };
+    ff8Img.src = "ff8-font.png";
+
+    function atlasReady() {
+        return !!ff8Img && ff8Img.complete && ff8Img.naturalWidth > 0;
+    }
+
+    function ff8Var(name) {
+        var v = getComputedStyle(document.documentElement).getPropertyValue(name);
+        return v ? (parseFloat(v) || 0) : 0;
+    }
+
+    function drawTextOnCanvas(canvas, text, row) {
+        var top = ff8Var("--ff8-top");
+        var bot = ff8Var("--ff8-bot");
+        var ih = Math.max(1, 12 - top - bot);
+        var total = 0;
+        var i;
+        for (i = 0; i < text.length; i++) {
+            var g = FF8_GLYFF[text.charCodeAt(i)];
+            if (g) total += g.w;
+        }
+        canvas.width = total;
+        canvas.height = ih;
+        var ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, total, ih);
+        if (total && atlasReady()) {
+            ctx.imageSmoothingEnabled = false;
+            var x = 0;
+            for (i = 0; i < text.length; i++) {
+                var g2 = FF8_GLYFF[text.charCodeAt(i)];
+                if (!g2) continue;
+                ctx.drawImage(ff8Img, g2.x, row + top, g2.w, ih, x, 0, g2.w, ih);
+                x += g2.w;
+            }
+        }
+        canvas.style.width = (total * FF8_SCALE) + "px";
+        canvas.style.height = (ih * FF8_SCALE) + "px";
+    }
+
+    function glyphOrTextUnit(ch, row) {
+        if (atlasReady() && FF8_GLYFF[ch.charCodeAt(0)]) return { glyph: ch, row: row };
+        return { html: escapeHtml(ch) };
+    }
+
+    function resolveQuote(ch, msg, i) {
+        if (ch !== "\"" && ch !== "'") return ch;
+        var prev = i > 0 ? msg[i - 1] : "";
+        var next = i < msg.length - 1 ? msg[i + 1] : "";
+        if (!next || /\s/.test(next) || /[)\]}>.,;:!?]/.test(prev)) {
+            return ch === "\"" ? "\u201d" : "\u2019";
+        }
+        if (!prev || /\s/.test(prev) || /[([{<]/.test(prev)) {
+            return ch === "\"" ? "\u201c" : "\u2018";
+        }
+        if (ch === "'") return "\u2019";
+        return /\w/.test(next) ? "\u201c" : "\u201d";
+    }
+
+    function ff8Span(ch, row) {
+        var g = FF8_GLYFF[ch.charCodeAt(0)];
+        if (!g) return null;
+        row = row || 0;
+        return "<span class=\"bglyph\" style=\"width:" + (g.w * FF8_SCALE) +
+            "px;height:" + (12 * FF8_SCALE) +
+            "px;background-position:-" + (g.x * FF8_SCALE) +
+            "px -" + (row * FF8_SCALE) + "px\"></span>";
+    }
+
+    function textUnitHtml(ch, row) {
+        var s = ff8Span(ch, row);
+        return s !== null ? s : escapeHtml(ch);
+    }
+
+    function textToHtml(text, row) {
+        var out = "";
+        for (var i = 0; i < text.length; i++) out += textUnitHtml(text[i], row);
+        return out;
+    }
+
+    function buildTextRuns(container, text, row) {
+        container.innerHTML = "";
+        if (!atlasReady()) {
+            container.innerHTML = textToHtml(text, row);
+            return;
+        }
+        var out = document.createDocumentFragment();
+        var buf = "";
+        function flush() {
+            if (!buf) return;
+            var c = document.createElement("canvas");
+            c.className = "ff8-canvas";
+            drawTextOnCanvas(c, buf, row);
+            out.appendChild(c);
+            buf = "";
+        }
+        for (var i = 0; i < text.length; i++) {
+            if (text[i] === " ") {
+                flush();
+                out.appendChild(document.createTextNode("\u200b"));
+            } else if (FF8_GLYFF[text.charCodeAt(i)]) {
+                buf += text[i];
+            } else {
+                flush();
+                out.appendChild(document.createTextNode(text[i]));
+            }
+        }
+        flush();
+        container.appendChild(out);
+    }
+
+    var sevenTv = {};
+    var sevenTvOverlay = {};
+    var channelEmotesLoaded = false;
+
+    var FFZ_MODIFIERS = {
+        "ffzW": "fx-wide",
+        "ffzX": "fx-flipx",
+        "ffzY": "fx-flipy",
+        "ffzCursed": "fx-cursed",
+        "ffzRainbow": "fx-rainbow",
+        "ffzHyper": "fx-hyper",
+        "ffzBounce": "fx-bounce",
+        "ffzJam": "fx-jam",
+        "ffzSpin": "fx-spin"
+    };
+
+    function addSevenTvEmotes(emotes) {
+        (emotes || []).forEach(function (e) {
+            if (!e.data || !e.data.host || !e.data.host.url) return;
+            var url = "https:" + e.data.host.url + "/4x.webp";
+            var zeroWidth = (e.flags & 1) || (e.data && (e.data.flags & 256));
+            (zeroWidth ? sevenTvOverlay : sevenTv)[e.name] = url;
+        });
+    }
+
+    function loadSevenTvGlobal() {
+        fetch("https://7tv.io/v3/emote-sets/global")
+            .then(function (r) { return r.json(); })
+            .then(function (data) { addSevenTvEmotes(data.emotes); })
+            .catch(function () {});
+    }
+
+    function loadSevenTvChannel(roomId) {
+        if (channelEmotesLoaded || !roomId) return;
+        channelEmotesLoaded = true;
+        fetch("https://7tv.io/v3/users/twitch/" + roomId)
+            .then(function (r) { return r.json(); })
+            .then(function (user) {
+                if (!user || !user.emote_set_id) return null;
+                return fetch("https://7tv.io/v3/emote-sets/" + user.emote_set_id).then(function (r) { return r.json(); });
+            })
+            .then(function (set) { addSevenTvEmotes(set && set.emotes); })
+            .catch(function () {});
+    }
+
+    var bttv = {};
+    var bttvOverlay = {};
+    var bttvChannelLoaded = false;
+
+    function addBttvEmotes(emotes) {
+        (emotes || []).forEach(function (e) {
+            if (!e || !e.id || !e.code) return;
+            var url = "https://cdn.betterttv.net/emote/" + e.id + "/3x";
+            (e.zeroWidth ? bttvOverlay : bttv)[e.code] = url;
+        });
+    }
+
+    function loadBttvGlobal() {
+        fetch("https://api.betterttv.net/3/cached/emotes/global")
+            .then(function (r) { return r.json(); })
+            .then(addBttvEmotes)
+            .catch(function () {});
+    }
+
+    function loadBttvChannel(roomId) {
+        if (bttvChannelLoaded || !roomId) return;
+        bttvChannelLoaded = true;
+        fetch("https://api.betterttv.net/3/cached/users/twitch/" + roomId)
+            .then(function (r) { return r.json(); })
+            .then(function (user) {
+                if (!user || !user.channelEmotes) return;
+                addBttvEmotes(user.channelEmotes);
+                addBttvEmotes(user.sharedEmotes);
+            })
+            .catch(function () {});
+    }
+
+    var badges = {};
+    var badgeSubFallback = "";
+
+    function storeBadges(data) {
+        (data && data.badges || []).forEach(function (b) {
+            if (!b || !b.setID) return;
+            var url = b.imageURL;
+            if (/\/1$/.test(url)) url = url.slice(0, -1) + "3";
+            var setId = b.setID;
+            badges[setId + "/1"] = url;
+            if (setId === "subscriber") {
+                var isPlain = (b.title || "") === "Subscriber";
+                var m = /^(\d+)-Month Subscriber$/.exec(b.title || "");
+                if (m) badges[setId + "/" + m[1]] = url;
+                if (isPlain || !badgeSubFallback) badgeSubFallback = url;
+            }
+        });
+    }
+
+    function loadGlobalBadges() {
+        fetch("https://api.twitchinsights.net/v1/badges/global")
+            .then(function (r) { return r.json(); })
+            .then(storeBadges)
+            .catch(function () {});
+    }
+
+    function badgeImages(userBadges) {
+        var html = "";
+        if (!userBadges) return html;
+        Object.keys(userBadges).forEach(function (setId) {
+            var url = badges[setId + "/" + userBadges[setId]];
+            if (!url && setId === "subscriber") url = badgeSubFallback;
+            if (url) html += "<img class=\"badge\" src=\"" + url + "\" alt=\"\">";
+        });
+        return html;
+    }
+
+    loadGlobalBadges();
+
+    loadSevenTvGlobal();
+
+    loadBttvGlobal();
+
+    function emoteImg(url) {
+        return "<img class=\"emote\" src=\"" + url +
+            "\" alt=\"\" onerror=\"this.remove();\">";
+    }
+
+    function applyUnit(blockquote, state, unit) {
+            if (unit.mod) {
+                var emotes = blockquote.querySelectorAll("img.emote:not(.overlay)");
+                if (emotes.length) {
+                    var el = emotes[emotes.length - 1];
+                    el.classList.add(unit.mod);
+                }
+            } else if (unit.glyph) {
+                if (!state.lastCanvas || state.lastCanvas.parentNode !== blockquote ||
+                    blockquote.lastChild !== state.lastCanvas) {
+                    state.lastCanvas = document.createElement("canvas");
+                    state.lastCanvas.className = "ff8-canvas";
+                    state.lastCanvas._txt = "";
+                    blockquote.appendChild(state.lastCanvas);
+                }
+                state.lastCanvas._txt += unit.glyph;
+                drawTextOnCanvas(state.lastCanvas, state.lastCanvas._txt, unit.row);
+            } else {
+                blockquote.insertAdjacentHTML("beforeend", unit.html);
+                state.lastCanvas = null;
+            }
+            applyOverlays(blockquote);
+        }
+
+        function typeMessage(blockquote, units) {
+            var state = { lastCanvas: null };
+            var done = 0;
+            var timer = setInterval(function () {
+                if (done >= units.length) {
+                    clearInterval(timer);
+                    return;
+                }
+                applyUnit(blockquote, state, units[done]);
+                done++;
+            }, 25);
+        }
+
+        function renderAll(blockquote, units) {
+            var state = { lastCanvas: null };
+            for (var i = 0; i < units.length; i++) applyUnit(blockquote, state, units[i]);
+        }
+
+    function applyOverlays(blockquote) {
+        blockquote.querySelectorAll("img.overlay").forEach(function (img) {
+            if (img.closest(".e-stack")) return;
+            var node = img.previousSibling;
+            var base = null;
+            while (node && node !== blockquote) {
+                if (node.nodeType === 3) {
+                    if (!/\S/.test(node.nodeValue.replace(/\u200b/g, ""))) {
+                        node = node.previousSibling;
+                        continue;
+                    }
+                    break;
+                }
+                if (node.nodeType === 1) {
+                    if (node.classList.contains("emote")) {
+                        base = node;
+                        break;
+                    }
+                    if (node.classList.contains("e-stack")) {
+                        base = node;
+                        break;
+                    }
+                    if (node.classList.contains("ff8-canvas") &&
+                        node._txt && !/\S/.test(node._txt)) {
+                        node = node.previousSibling;
+                        continue;
+                    }
+                }
+                break;
+            }
+            if (!base) return;
+            var stack;
+            if (base.classList && base.classList.contains("e-stack")) {
+                stack = base;
+            } else {
+                stack = document.createElement("span");
+                stack.className = "e-stack";
+                base.parentNode.replaceChild(stack, base);
+                stack.appendChild(base);
+            }
+            stack.appendChild(img);
+        });
+    }
+
+    function parseTwitchRanges(messageEmotes) {
+        var parsed = {};
+        if (typeof messageEmotes === "string") {
+            messageEmotes.split("/").forEach(function (group) {
+                if (!group) return;
+                var colon = group.indexOf(":");
+                var id = group.slice(0, colon);
+                var ranges = group.slice(colon + 1).split(",");
+                parsed[id] = ranges.map(function (r) {
+                    var dash = r.indexOf("-");
+                    return [r.slice(0, dash), r.slice(dash + 1)];
+                });
+            });
+        } else if (messageEmotes && typeof messageEmotes === "object") {
+            parsed = messageEmotes;
+        }
+        var ranges = [];
+        Object.keys(parsed).forEach(function (emoteId) {
+            parsed[emoteId].forEach(function (r) {
+                var start, end;
+                if (typeof r === "string") {
+                    var dash = r.indexOf("-");
+                    start = parseInt(r.slice(0, dash), 10);
+                    end = parseInt(r.slice(dash + 1), 10);
+                } else {
+                    start = parseInt(r[0], 10);
+                    end = parseInt(r[1], 10);
+                }
+                ranges.push({ id: emoteId, start: start, end: end });
+            });
+        });
+        ranges.sort(function (a, b) { return a.start - b.start; });
+        return ranges;
+    }
+
+    function twitchEmoteUnit(range) {
+        var url = "https://static-cdn.jtvnw.net/emoticons/v2/" +
+            range.id + "/default/dark/3.0";
+        return emoteImg(url);
+    }
+
+    function buildUnits(message, messageEmotes) {
+        var twitchRanges = parseTwitchRanges(messageEmotes);
+        var units = [];
+        var i = 0;
+
+        function nearTwitchRange() {
+            for (var k = 0; k < twitchRanges.length; k++) {
+                if (twitchRanges[k].start === i) return twitchRanges[k];
+            }
+            return null;
+        }
+
+        while (i < message.length) {
+            var range = nearTwitchRange();
+            if (range) {
+                units.push({ html: twitchEmoteUnit(range) });
+                i = range.end + 1;
+                continue;
+            }
+            if (/\s/.test(message[i])) {
+                units.push(glyphOrTextUnit(message[i], 0));
+                units.push({ html: "\u200b" });
+                i++;
+                continue;
+            }
+            var wordEnd = i;
+            while (wordEnd < message.length && !/\s/.test(message[wordEnd])) {
+                var r2 = null;
+                for (var k2 = 0; k2 < twitchRanges.length; k2++) {
+                    if (twitchRanges[k2].start === wordEnd) { r2 = twitchRanges[k2]; break; }
+                }
+                if (r2) break;
+                wordEnd++;
+            }
+            var word = message.slice(i, wordEnd);
+            var overlay = false;
+            var url = sevenTv[word];
+            if (!url && sevenTvOverlay[word]) {
+                url = sevenTvOverlay[word];
+                overlay = true;
+            }
+            if (!url) {
+                url = bttv[word];
+                if (!url && bttvOverlay[word]) {
+                    url = bttvOverlay[word];
+                    overlay = true;
+                }
+            }
+            if (!url) {
+                var lead = 0;
+                while (lead < word.length && /^[([{<]$/.test(word[lead])) lead++;
+                var tail = 0;
+                while (tail < word.length - lead && /^[!.,;:?)\]}>]$/.test(word[word.length - 1 - tail])) tail++;
+                var core = word.slice(lead, word.length - tail);
+                overlay = !!sevenTvOverlay[core] || !!bttvOverlay[core];
+                url = sevenTv[core] || sevenTvOverlay[core] || bttv[core] || bttvOverlay[core];
+                if (core !== word && url) {
+                    var u;
+                    for (u = 0; u < lead; u++) units.push(glyphOrTextUnit(word[u], 0));
+                    units.push({ html: emoteImg(url).replace("class=\"emote\"", overlay ? "class=\"emote overlay\"" : "class=\"emote\"") });
+                    for (u = 0; u < tail; u++) units.push(glyphOrTextUnit(word[word.length - tail + u], 0));
+                    i = wordEnd;
+                    continue;
+                }
+            }
+            var fx = !url && FFZ_MODIFIERS[word];
+            if (fx) {
+                var prevEmote = false;
+                for (var p = units.length - 1; p >= 0; p--) {
+                    if (units[p].glyph) {
+                        if (!/\S/.test(units[p].glyph)) continue;
+                        prevEmote = false;
+                        break;
+                    }
+                    var h = units[p].html;
+                    if (typeof h !== "string" || !h) continue;
+                    if (!/\S/.test(h.replace(/\u200b/g, ""))) continue;
+                    prevEmote = /<img /.test(h);
+                    break;
+                }
+                if (prevEmote) {
+                    units.push({ mod: fx });
+                    i = wordEnd;
+                    continue;
+                }
+            }
+            if (url) {
+                units.push({ html: emoteImg(url).replace("class=\"emote\"", overlay ? "class=\"emote overlay\"" : "class=\"emote\"") });
+                i = wordEnd;
+                continue;
+            }
+            var wrap = 0;
+            for (var c = i; c < wordEnd; c++) {
+                units.push(glyphOrTextUnit(resolveQuote(message[c], message, c), 0));
+                if (c < wordEnd - 1 && ++wrap >= 26) { units.push({ html: "\u200b" }); wrap = 0; }
+            }
+            i = wordEnd;
+        }
+        return units;
+    }
+
+    ComfyJS.onChat = (user, message, flags, self, extra) => {
+        loadSevenTvChannel(extra.roomId);
+        loadBttvChannel(extra.roomId);
+        if (user.toLowerCase() === "streamelements") return;
+        var newMessage = document.createElement("li");
+        var box = document.createElement("div");
+        var header = document.createElement("div");
+        var username = document.createElement("span");
+        var blockquote = document.createElement("blockquote");
+
+        box.className = "ff8-stone-block";
+        header.className = "ff8-header";
+
+        username.className = "user username";
+        var nameRow = 0;
+        if (flags.broadcaster) nameRow = FF8_USER_ROWS.broadcaster;
+        else if (flags.mod) nameRow = FF8_USER_ROWS.mod;
+        else if (flags.vip) nameRow = FF8_USER_ROWS.vip;
+        else if (flags.subscriber) nameRow = FF8_USER_ROWS.sub;
+
+        buildTextRuns(username, user, nameRow);
+
+        blockquote.className = "message-text";
+        blockquote.innerHTML = "";
+
+        header.appendChild(username);
+        box.appendChild(header);
+        box.appendChild(blockquote);
+        newMessage.appendChild(box);
+        var units = buildUnits(message, extra.messageEmotes);
+        renderAll(blockquote, units);
+        chat.append(newMessage);
+        if (blockquote.offsetWidth) blockquote.style.minWidth = blockquote.offsetWidth + "px";
+        if (blockquote.offsetHeight) blockquote.style.minHeight = blockquote.offsetHeight + "px";
+        blockquote.innerHTML = "";
+        setTimeout(function () { typeMessage(blockquote, units); }, FF8_POP_MS);
+    }
+    
+    var notice = null;
+
+    function configNotice(message) {
+        notice = document.createElement("li");
+        notice.className = "config-notice";
+        notice.textContent = message;
+        chat.appendChild(notice);
+    }
+
+    if (typeof CHANNEL !== "string" || !CHANNEL.trim()) {
+        configNotice("channel.js missing - add your Twitch channel name and refresh");
+    } else {
+        ComfyJS.Init(CHANNEL.trim().replace(/^#/, ""));
+    }
+
+    var tuner = document.getElementById("ff8-tuner");
+
+    function tunerSync() {
+        document.querySelectorAll("#ff8-tuner input[type=range]").forEach(function (inp) {
+            var val = ff8Var(inp.dataset.var);
+            inp.value = String(Math.round(val));
+            tunerOut(inp);
+        });
+    }
+
+    function tunerOut(inp) {
+        document.getElementById("o-" + inp.dataset.k).textContent =
+            document.documentElement.style.getPropertyValue(inp.dataset.var) || ff8Var(inp.dataset.var) + "px";
+    }
+
+    document.querySelectorAll("#ff8-tuner input[type=range]").forEach(function (inp) {
+        inp.addEventListener("input", function () {
+            var v = parseFloat(inp.value) || 0;
+            document.documentElement.style.setProperty(inp.dataset.var, v + "px");
+            tunerOut(inp);
+        });
+    });
+
+    document.getElementById("ff8-bake").addEventListener("click", function () {
+        document.querySelectorAll("#ff8-tuner input[type=range]").forEach(function (inp) {
+            document.documentElement.style.setProperty(inp.dataset.var, ff8Var(inp.dataset.var) + "px");
+        });
+        tuner.remove();
+    });
+
+    document.addEventListener("keydown", function (e) {
+        if (e.key === "f" || e.key === "F") {
+            if (tuner) {
+                tuner.classList.toggle("show");
+                if (tuner.classList.contains("show")) tunerSync();
+            }
+        }
+    });
+    </script>
+</body>
+</html>
