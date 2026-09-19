@@ -1,4 +1,4 @@
-var FF8_FONT_DATA = {
+var THEME_DATA = {
 	"height": 16,
 	"origin": {
 		"x": 8,
@@ -22,6 +22,23 @@ var FF8_FONT_DATA = {
 		"grey": 72,
 		"gray": 72,
 		"black": 84
+	},
+	"overlays": {
+		"window_style": {
+			"x": 0,
+			"y": 96,
+			"title": "Window Theme",
+			"default": "style_1",
+			"background": true,
+			"options": {
+				"style_1": {
+					"x": 0,
+					"y": 96,
+					"w": 312,
+					"h": 18
+				}
+			}
+		}
 	},
 	"border": {
 		"tl": {
